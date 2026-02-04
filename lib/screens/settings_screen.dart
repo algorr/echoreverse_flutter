@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import '../config/constants.dart';
+import '../services/subscription_service.dart';
+import '../utils/snackbar_helper.dart';
 import 'paywall_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -45,6 +47,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isRestoring = true);
     try {
       final customerInfo = await Purchases.restorePurchases();
+      SubscriptionService().resetCache();
+
       final isActive =
           customerInfo.entitlements.all[AppConstants.entitlementId]?.isActive ?? false;
 
@@ -54,23 +58,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isActive
-                ? 'Subscription restored successfully!'
-                : 'No active subscription found.'),
-            backgroundColor: isActive ? Colors.green : Colors.orange,
-          ),
+        AppSnackBar.show(
+          context,
+          message: isActive
+              ? 'Subscription restored successfully!'
+              : 'No active subscription found.',
+          type: isActive ? SnackBarType.success : SnackBarType.warning,
         );
       }
     } catch (e) {
       setState(() => _isRestoring = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to restore purchases. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
+        AppSnackBar.show(
+          context,
+          message: 'Failed to restore purchases. Please try again.',
+          type: SnackBarType.error,
         );
       }
     }
@@ -154,11 +156,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Note: Actual audio files would need to be deleted from file system too
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All recordings cleared.'),
-            backgroundColor: Colors.green,
-          ),
+        AppSnackBar.show(
+          context,
+          message: 'All recordings cleared.',
+          type: SnackBarType.success,
         );
       }
     }

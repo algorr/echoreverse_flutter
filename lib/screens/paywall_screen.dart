@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/constants.dart';
+import '../services/subscription_service.dart';
+import '../utils/snackbar_helper.dart';
 import '../widgets/main_recorder.dart';
 
 class PaywallScreen extends StatefulWidget {
@@ -25,14 +29,13 @@ class _PaywallScreenState extends State<PaywallScreen>
   late AnimationController _pulseController;
   late AnimationController _shakeController;
 
-  // Countdown timer for urgency
+  // Countdown timer for urgency (only on first launch)
   int _minutesLeft = 14;
   int _secondsLeft = 59;
   Timer? _countdownTimer;
+  bool _showTimer = false;
 
-  // Social proof numbers
-  final int _todayPurchases = 47 + Random().nextInt(30);
-  final int _totalUsers = 1000 + Random().nextInt(100);
+  static const String _timerShownKey = 'paywall_timer_shown';
 
   @override
   void initState() {
@@ -47,14 +50,28 @@ class _PaywallScreenState extends State<PaywallScreen>
       duration: const Duration(milliseconds: 500),
     );
 
-    _startCountdown();
+    _initTimer();
     _fetchOfferings();
 
     // Periodic shake for attention
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted)
+      if (mounted) {
         _shakeController.forward().then((_) => _shakeController.reset());
+      }
     });
+  }
+
+  Future<void> _initTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final timerShown = prefs.getBool(_timerShownKey) ?? false;
+
+    if (!timerShown) {
+      await prefs.setBool(_timerShownKey, true);
+      if (mounted) {
+        setState(() => _showTimer = true);
+        _startCountdown();
+      }
+    }
   }
 
   void _startCountdown() {
@@ -120,12 +137,38 @@ class _PaywallScreenState extends State<PaywallScreen>
     if (package == null) return;
     setState(() => _isLoading = true);
     try {
-      CustomerInfo customerInfo = await Purchases.purchasePackage(package);
-      if (customerInfo.entitlements.all["echoreverse_pro"]?.isActive == true) {
-        _navigateToHome();
+      await Purchases.purchasePackage(package);
+      // Purchase successful - reset cache and navigate
+      SubscriptionService().resetCache();
+      _navigateToHome();
+    } on PlatformException catch (e) {
+      if (mounted) {
+        final errorCode = PurchasesErrorHelper.getErrorCode(e);
+        String message;
+        SnackBarType type;
+        switch (errorCode) {
+          case PurchasesErrorCode.purchaseCancelledError:
+            message = 'Purchase cancelled.';
+            type = SnackBarType.info;
+            break;
+          case PurchasesErrorCode.networkError:
+            message = 'Network error. Please check your connection.';
+            type = SnackBarType.error;
+            break;
+          case PurchasesErrorCode.productNotAvailableForPurchaseError:
+            message = 'Product not available.';
+            type = SnackBarType.warning;
+            break;
+          default:
+            message = 'Purchase failed. Please try again.';
+            type = SnackBarType.error;
+        }
+        AppSnackBar.show(context, message: message, type: type);
       }
     } catch (e) {
-      // Handle error
+      if (mounted) {
+        AppSnackBar.show(context, message: 'Purchase failed. Please try again.', type: SnackBarType.error);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -135,17 +178,19 @@ class _PaywallScreenState extends State<PaywallScreen>
     setState(() => _isLoading = true);
     try {
       CustomerInfo customerInfo = await Purchases.restorePurchases();
-      if (customerInfo.entitlements.all["echoreverse_pro"]?.isActive == true) {
+      SubscriptionService().resetCache();
+
+      if (customerInfo.entitlements.all[AppConstants.entitlementId]?.isActive == true) {
         _navigateToHome();
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("No active subscription found.")),
-          );
+          AppSnackBar.show(context, message: 'No active subscription found.', type: SnackBarType.warning);
         }
       }
     } catch (e) {
-      // Handle error
+      if (mounted) {
+        AppSnackBar.show(context, message: 'Restore failed. Please try again.', type: SnackBarType.error);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -157,8 +202,13 @@ class _PaywallScreenState extends State<PaywallScreen>
         MaterialPageRoute(builder: (_) => const MainRecorder()),
         (route) => false,
       );
-    } else {
+    } else if (Navigator.of(context).canPop()) {
       Navigator.pop(context);
+    } else {
+      // Came from splash via pushReplacement — no route to pop back to
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainRecorder()),
+      );
     }
   }
 
@@ -236,41 +286,42 @@ class _PaywallScreenState extends State<PaywallScreen>
                               ),
                             ),
                             const Spacer(),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 10 * scale,
-                                vertical: 4 * scale,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(12 * scale),
-                                border: Border.all(
-                                  color: Colors.red.withValues(alpha: 0.5),
+                            if (_showTimer)
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 10 * scale,
+                                  vertical: 4 * scale,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12 * scale),
+                                  border: Border.all(
+                                    color: Colors.red.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.timer,
+                                      color: Colors.red[300],
+                                      size: 14 * scale,
+                                    ),
+                                    SizedBox(width: 4 * scale),
+                                    Text(
+                                      '${_minutesLeft.toString().padLeft(2, '0')}:${_secondsLeft.toString().padLeft(2, '0')}',
+                                      style: TextStyle(
+                                        color: Colors.red[300],
+                                        fontSize: 13 * scale,
+                                        fontWeight: FontWeight.bold,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.timer,
-                                    color: Colors.red[300],
-                                    size: 14 * scale,
-                                  ),
-                                  SizedBox(width: 4 * scale),
-                                  Text(
-                                    '${_minutesLeft.toString().padLeft(2, '0')}:${_secondsLeft.toString().padLeft(2, '0')}',
-                                    style: TextStyle(
-                                      color: Colors.red[300],
-                                      fontSize: 13 * scale,
-                                      fontWeight: FontWeight.bold,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                             const Spacer(),
                             GestureDetector(
                               onTap: () =>
@@ -289,40 +340,41 @@ class _PaywallScreenState extends State<PaywallScreen>
                         ),
                       ),
 
-                      // LIMITED OFFER Banner
-                      Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.symmetric(vertical: 5 * scale),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.amber.withValues(alpha: 0.25),
-                              Colors.orange.withValues(alpha: 0.25),
+                      // LIMITED OFFER Banner (only on first launch)
+                      if (_showTimer)
+                        Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.symmetric(vertical: 5 * scale),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.amber.withValues(alpha: 0.25),
+                                Colors.orange.withValues(alpha: 0.25),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(6 * scale),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.bolt,
+                                color: Colors.amber,
+                                size: 14 * scale,
+                              ),
+                              SizedBox(width: 4 * scale),
+                              Text(
+                                'LIMITED TIME: 70% OFF',
+                                style: TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 11 * scale,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(6 * scale),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.bolt,
-                              color: Colors.amber,
-                              size: 14 * scale,
-                            ),
-                            SizedBox(width: 4 * scale),
-                            Text(
-                              'LIMITED TIME: 70% OFF',
-                              style: TextStyle(
-                                color: Colors.amber,
-                                fontSize: 11 * scale,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
 
                       const Spacer(flex: 1),
 
@@ -372,26 +424,9 @@ class _PaywallScreenState extends State<PaywallScreen>
                           ),
                           SizedBox(width: 6 * scale),
                           Text(
-                            '4.9 (${(_totalUsers / 1000).toStringAsFixed(0)}K+)',
+                            '4.9',
                             style: TextStyle(
                               color: Colors.white54,
-                              fontSize: 11 * scale,
-                            ),
-                          ),
-                          SizedBox(width: 10 * scale),
-                          Container(
-                            width: 6 * scale,
-                            height: 6 * scale,
-                            decoration: const BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          SizedBox(width: 4 * scale),
-                          Text(
-                            '$_todayPurchases today',
-                            style: TextStyle(
-                              color: Colors.green[300],
                               fontSize: 11 * scale,
                             ),
                           ),
@@ -537,14 +572,17 @@ class _PaywallScreenState extends State<PaywallScreen>
                       SizedBox(height: 6 * scale),
 
                       // === FOOTER ===
-                      Text(
-                        "⚠️ Offer ends when timer runs out",
-                        style: TextStyle(
-                          color: Colors.red[300],
-                          fontSize: 10 * scale,
+                      if (_showTimer)
+                        Padding(
+                          padding: EdgeInsets.only(bottom: 4 * scale),
+                          child: Text(
+                            "Offer ends when timer runs out",
+                            style: TextStyle(
+                              color: Colors.red[300],
+                              fontSize: 10 * scale,
+                            ),
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 4 * scale),
                       Text(
                         'Secure payment • Cancel Anytime',
                         style: TextStyle(
@@ -618,19 +656,30 @@ class _PaywallScreenState extends State<PaywallScreen>
     final isLifetime = pkg.packageType == PackageType.lifetime;
     final isAnnual = pkg.packageType == PackageType.annual;
 
-    // ANCHORING: Show fake original price
+    // Find weekly package for price comparison
+    final weeklyPkg = _packages.where((p) => p.packageType == PackageType.weekly).firstOrNull;
+    final weeklyPrice = weeklyPkg?.storeProduct.price ?? 0;
+    final currency = pkg.storeProduct.currencyCode;
+
+    // Calculate comparison price based on weekly price
     String? originalPrice;
-    String? savePercent;
-    if (isLifetime) {
-      final original = pkg.storeProduct.price * 3.3;
-      originalPrice =
-          '${pkg.storeProduct.currencyCode} ${original.toStringAsFixed(2)}';
-      savePercent = '70%';
-    } else if (isAnnual) {
-      final original = pkg.storeProduct.price * 2;
-      originalPrice =
-          '${pkg.storeProduct.currencyCode} ${original.toStringAsFixed(2)}';
-      savePercent = '50%';
+    int? savePercent;
+
+    if (weeklyPrice > 0) {
+      double comparisonPrice = 0;
+
+      if (isLifetime) {
+        // Lifetime vs 2 years of weekly (52 weeks × 2)
+        comparisonPrice = weeklyPrice * 52 * 2;
+      } else if (isAnnual) {
+        // Annual vs 52 weeks of weekly
+        comparisonPrice = weeklyPrice * 52;
+      }
+
+      if (comparisonPrice > pkg.storeProduct.price) {
+        originalPrice = '$currency ${comparisonPrice.toStringAsFixed(2)}';
+        savePercent = (((comparisonPrice - pkg.storeProduct.price) / comparisonPrice) * 100).round();
+      }
     }
 
     return GestureDetector(
@@ -770,7 +819,7 @@ class _PaywallScreenState extends State<PaywallScreen>
                           borderRadius: BorderRadius.circular(4 * scale),
                         ),
                         child: Text(
-                          '-$savePercent',
+                          '-$savePercent%',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 9 * scale,

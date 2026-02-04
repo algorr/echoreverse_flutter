@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SubscriptionService {
   static const String _studioRecordCountKey = 'studio_record_count';
   static const String _challengePlayCountKey = 'challenge_play_count';
-  static const String _entitlementId = 'echoreverse_pro';
+  static const String _entitlementId = 'EchoReverse';
 
   // Singleton
   static final SubscriptionService _instance = SubscriptionService._internal();

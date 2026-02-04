@@ -3,7 +3,7 @@ class AppConstants {
   static const String revenueCatSdkKey = 'appl_PvBtdklooidVHaxSsEHjIWfGLjL';
 
   // Entitlement ID utilized in Paywall logic
-  static const String entitlementId = 'echoreverse_pro';
+  static const String entitlementId = 'EchoReverse';
 
   // App Info
   static const String appVersion = '1.0.0';

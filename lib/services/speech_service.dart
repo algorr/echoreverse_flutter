@@ -18,11 +18,9 @@ class SpeechService {
     try {
       _isInitialized = await _speechToText.initialize(
         onError: (error) {
-          print('Speech recognition error: $error');
           _isListening = false;
         },
         onStatus: (status) {
-          print('Speech recognition status: $status');
           if (status == 'done' || status == 'notListening') {
             _isListening = false;
           }
@@ -30,7 +28,6 @@ class SpeechService {
       );
       return _isInitialized;
     } catch (e) {
-      print('Failed to initialize speech recognition: $e');
       return false;
     }
   }

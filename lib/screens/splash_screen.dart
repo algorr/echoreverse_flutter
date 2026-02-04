@@ -88,48 +88,29 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initRevenueCat() async {
-    debugPrint('═══════════════════════════════════════════');
-    debugPrint('🚀 REVENUECAT INITIALIZATION');
-    debugPrint('═══════════════════════════════════════════');
     try {
-      await Purchases.setLogLevel(LogLevel.debug);
+      await Purchases.setLogLevel(LogLevel.error);
       PurchasesConfiguration configuration = PurchasesConfiguration(
         AppConstants.revenueCatSdkKey,
       );
       await Purchases.configure(configuration);
-      debugPrint('✅ RevenueCat SDK configured');
-      debugPrint('   API Key: ${AppConstants.revenueCatSdkKey.substring(0, 10)}...');
 
       // Pre-fetch offerings
-      debugPrint('───────────────────────────────────────────');
-      debugPrint('🔄 Pre-fetching offerings...');
       try {
-        final offerings = await Purchases.getOfferings();
-        debugPrint('📋 Total offerings: ${offerings.all.length}');
-        debugPrint('📋 Current offering: ${offerings.current?.identifier ?? "NONE"}');
-
-        if (offerings.current != null) {
-          debugPrint('✅ Current offering has ${offerings.current!.availablePackages.length} packages');
-          for (var pkg in offerings.current!.availablePackages) {
-            debugPrint('   📦 ${pkg.identifier}');
-            debugPrint('      product_id: ${pkg.storeProduct.identifier}');
-            debugPrint('      price: ${pkg.storeProduct.priceString}');
-          }
-        } else {
-          debugPrint('⚠️ NO CURRENT OFFERING!');
-          debugPrint('   Available offerings: ${offerings.all.keys.toList()}');
-        }
-      } catch (e) {
-        debugPrint('⚠️ Pre-fetch error: $e');
+        await Purchases.getOfferings();
+      } catch (_) {
+        // Offerings will be fetched again in PaywallScreen
       }
-      debugPrint('═══════════════════════════════════════════');
-    } catch (e) {
-      debugPrint('❌ RevenueCat init error: $e');
+    } catch (_) {
+      // RevenueCat initialization failed, will retry on paywall
     }
   }
 
   Future<bool> _checkSubscription() async {
     try {
+      // Sync purchases first to get latest status from server
+      await Purchases.syncPurchases();
+      // Then get fresh customer info
       CustomerInfo customerInfo = await Purchases.getCustomerInfo();
       return customerInfo
               .entitlements

@@ -9,6 +9,7 @@ import '../services/rate_service.dart';
 import '../screens/paywall_screen.dart';
 import '../screens/settings_screen.dart';
 import '../data/challenge_words.dart';
+import '../utils/snackbar_helper.dart';
 import 'visualizer.dart';
 import 'effects_panel.dart';
 import 'library_modal.dart';
@@ -335,6 +336,56 @@ class _MainRecorderState extends State<MainRecorder>
         builder: (_) => const PaywallScreen(),
       ),
     );
+  }
+
+  Future<void> _saveToArchive() async {
+    if (_currentRecordingId == null) return;
+    if (_selectedEffect == EffectType.none) {
+      AppSnackBar.show(context, message: 'Please select an effect first', type: SnackBarType.warning);
+      return;
+    }
+
+    final recording = _library.firstWhere(
+      (r) => r.id == _currentRecordingId,
+      orElse: () => throw Exception('Recording not found'),
+    );
+
+    try {
+      // Export reversed audio with current effect
+      final exportedReversedPath = await _audioService.exportWithEffect(
+        recording.reversedPath,
+        _selectedEffect,
+      );
+
+      // Export original audio with current effect
+      final exportedOriginalPath = await _audioService.exportWithEffect(
+        recording.originalPath,
+        _selectedEffect,
+      );
+
+      // Create new recording entry with effect label
+      final newId = DateTime.now().millisecondsSinceEpoch.toString();
+      final newRecording = StoredRecording(
+        id: newId,
+        timestamp: DateTime.now(),
+        duration: recording.duration,
+        originalPath: exportedOriginalPath,
+        reversedPath: exportedReversedPath,
+        effectLabel: _selectedEffect.label,
+      );
+
+      setState(() {
+        _library.insert(0, newRecording);
+      });
+
+      if (mounted) {
+        AppSnackBar.show(context, message: 'Saved with ${_selectedEffect.label} effect', type: SnackBarType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackBar.show(context, message: 'Save failed: $e', type: SnackBarType.error);
+      }
+    }
   }
 
   void _loadRecording(StoredRecording recording) {
@@ -913,7 +964,7 @@ class _MainRecorderState extends State<MainRecorder>
           'REV',
         ),
 
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
 
         // Effects toggle
         _buildSmallButton(
@@ -929,7 +980,17 @@ class _MainRecorderState extends State<MainRecorder>
           },
         ),
 
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
+
+        // Save to Archive
+        _buildSmallButton(
+          icon: Icons.save_alt,
+          isActive: false,
+          label: 'SAVE',
+          onTap: _saveToArchive,
+        ),
+
+        const SizedBox(width: 6),
 
         // Reset
         _buildSmallButton(
@@ -939,7 +1000,7 @@ class _MainRecorderState extends State<MainRecorder>
           onTap: _handleReset,
         ),
 
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
 
         // Original play
         _buildPlayButton(
@@ -1174,11 +1235,7 @@ class _MainRecorderState extends State<MainRecorder>
           const SizedBox(height: 24),
           GestureDetector(
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Playing target audio (Simulated)...'),
-                ),
-              );
+              AppSnackBar.show(context, message: 'Playing target audio (Simulated)...', type: SnackBarType.info);
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -1462,12 +1519,7 @@ class _MainRecorderState extends State<MainRecorder>
             right: 12,
             child: GestureDetector(
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Share feature coming soon!'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                AppSnackBar.show(context, message: 'Share feature coming soon!', type: SnackBarType.info);
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -1687,12 +1739,7 @@ class _MainRecorderState extends State<MainRecorder>
                   Expanded(
                     child: GestureDetector(
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Share feature coming soon!'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
+                        AppSnackBar.show(context, message: 'Share feature coming soon!', type: SnackBarType.info);
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),

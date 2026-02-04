@@ -176,6 +176,36 @@ class AudioService {
       case EffectType.ghost:
         processedAudio = _applyGhostEffect(audioData);
         break;
+      case EffectType.alien:
+        processedAudio = _applyAlienEffect(audioData);
+        break;
+      case EffectType.drunk:
+        processedAudio = _applyDrunkEffect(audioData);
+        break;
+      case EffectType.helium:
+        processedAudio = _applyHeliumEffect(audioData);
+        break;
+      case EffectType.giant:
+        processedAudio = _applyGiantEffect(audioData);
+        break;
+      case EffectType.whisper:
+        processedAudio = _applyWhisperEffect(audioData);
+        break;
+      case EffectType.megaphone:
+        processedAudio = _applyMegaphoneEffect(audioData);
+        break;
+      case EffectType.cave:
+        processedAudio = _applyCaveEffect(audioData);
+        break;
+      case EffectType.telephone:
+        processedAudio = _applyTelephoneEffect(audioData);
+        break;
+      case EffectType.stadium:
+        processedAudio = _applyStadiumEffect(audioData);
+        break;
+      case EffectType.horror:
+        processedAudio = _applyHorrorEffect(audioData);
+        break;
       case EffectType.none:
         processedAudio = audioData;
         break;
@@ -458,6 +488,463 @@ class AudioService {
 
     // 3. Add heavy reverb/echo
     return _applyEchoEffect(pitched);
+  }
+
+  /// Apply alien effect - pitch modulation with vibrato
+  Uint8List _applyAlienEffect(Uint8List audioData) {
+    final result = Uint8List(audioData.length);
+    const double sampleRate = 44100.0;
+    const double vibratoFreq = 6.0; // Vibrato speed
+    const double vibratoDepth = 0.3; // Pitch variation amount
+    const double baseFreq = 80.0; // Ring modulation frequency
+
+    for (int i = 0; i < audioData.length ~/ 2; i++) {
+      int sample = audioData[i * 2] | (audioData[i * 2 + 1] << 8);
+      if (sample > 32767) sample -= 65536;
+
+      // Vibrato modulation
+      final double vibrato = 1.0 + vibratoDepth * math.sin(2 * math.pi * vibratoFreq * i / sampleRate);
+
+      // Ring modulation with varying frequency
+      final double modFreq = baseFreq * vibrato;
+      final double modulator = math.sin(2 * math.pi * modFreq * i / sampleRate);
+
+      // Apply effect
+      final int newSample = (sample * modulator * 0.8).toInt().clamp(-32768, 32767);
+
+      result[i * 2] = newSample & 0xFF;
+      result[i * 2 + 1] = (newSample >> 8) & 0xFF;
+    }
+
+    // Pitch up slightly for more alien feel
+    return _resampleAudio(result, 1.2);
+  }
+
+  /// Apply drunk effect - pitch wobble + slur + slight slowdown
+  Uint8List _applyDrunkEffect(Uint8List audioData) {
+    // First slow down slightly (0.85x speed) - drunk people speak slower
+    final slowed = _resampleAudio(audioData, 0.85);
+
+    final numSamples = slowed.length ~/ 2;
+    final result = Uint8List(slowed.length);
+    final random = math.Random(42);
+
+    const double sampleRate = 44100.0;
+
+    // Multiple LFOs for complex wobble
+    const double wobbleFreq1 = 1.5;  // Main slow wobble
+    const double wobbleFreq2 = 0.3;  // Very slow drift
+    const double wobbleFreq3 = 4.0;  // Faster tremor
+
+    double phase = 0;
+    double readPos = 0;
+
+    for (int i = 0; i < numSamples && readPos < numSamples - 1; i++) {
+      // Complex pitch modulation simulating unstable voice
+      final double wobble1 = 0.08 * math.sin(2 * math.pi * wobbleFreq1 * i / sampleRate);
+      final double wobble2 = 0.05 * math.sin(2 * math.pi * wobbleFreq2 * i / sampleRate + 1.5);
+      final double wobble3 = 0.03 * math.sin(2 * math.pi * wobbleFreq3 * i / sampleRate);
+      final double randomWobble = (random.nextDouble() - 0.5) * 0.02;
+
+      // Speed varies between 0.85 and 1.15
+      final double speed = 1.0 + wobble1 + wobble2 + wobble3 + randomWobble;
+      readPos += speed;
+
+      if (readPos >= numSamples - 1) break;
+
+      // Linear interpolation for smooth reading
+      final int idx0 = readPos.floor();
+      final int idx1 = (idx0 + 1).clamp(0, numSamples - 1);
+      final double frac = readPos - idx0;
+
+      int sample0 = slowed[idx0 * 2] | (slowed[idx0 * 2 + 1] << 8);
+      if (sample0 > 32767) sample0 -= 65536;
+
+      int sample1 = slowed[idx1 * 2] | (slowed[idx1 * 2 + 1] << 8);
+      if (sample1 > 32767) sample1 -= 65536;
+
+      final int sample = (sample0 * (1 - frac) + sample1 * frac).toInt();
+
+      // Slight volume wobble
+      final double volWobble = 0.9 + 0.1 * math.sin(phase);
+      phase += 0.001;
+
+      final int finalSample = (sample * volWobble).toInt().clamp(-32768, 32767);
+
+      result[i * 2] = finalSample & 0xFF;
+      result[i * 2 + 1] = (finalSample >> 8) & 0xFF;
+    }
+
+    return result;
+  }
+
+  /// Apply helium effect - extreme pitch up
+  Uint8List _applyHeliumEffect(Uint8List audioData) {
+    // Extreme pitch up (2x) for helium balloon voice
+    return _resampleAudio(audioData, 2.0);
+  }
+
+  /// Apply giant effect - very slow with bass boost
+  Uint8List _applyGiantEffect(Uint8List audioData) {
+    // Pitch down significantly
+    final pitched = _resampleAudio(audioData, 0.4);
+
+    // Apply bass boost (simple low shelf)
+    final result = Uint8List(pitched.length);
+    double prev = 0;
+
+    for (int i = 0; i < pitched.length ~/ 2; i++) {
+      int sample = pitched[i * 2] | (pitched[i * 2 + 1] << 8);
+      if (sample > 32767) sample -= 65536;
+
+      // Simple bass boost using low pass + mix
+      final double alpha = 0.3;
+      final double filtered = alpha * sample + (1 - alpha) * prev;
+      prev = filtered;
+
+      // Mix original with boosted bass
+      final int boosted = (sample + filtered * 0.8).toInt().clamp(-32768, 32767);
+
+      result[i * 2] = boosted & 0xFF;
+      result[i * 2 + 1] = (boosted >> 8) & 0xFF;
+    }
+
+    return result;
+  }
+
+  /// Apply whisper effect - remove voiced component, add breathiness
+  Uint8List _applyWhisperEffect(Uint8List audioData) {
+    final result = Uint8List(audioData.length);
+    final random = math.Random(123);
+    final numSamples = audioData.length ~/ 2;
+
+    // Read all samples first
+    final samples = List<double>.filled(numSamples, 0);
+    for (int i = 0; i < numSamples; i++) {
+      int val = audioData[i * 2] | (audioData[i * 2 + 1] << 8);
+      if (val > 32767) val -= 65536;
+      samples[i] = val.toDouble();
+    }
+
+    // Get envelope (amplitude following) for modulating noise
+    final envelope = List<double>.filled(numSamples, 0);
+    double envFollower = 0;
+    const double attackCoef = 0.01;
+    const double releaseCoef = 0.0001;
+
+    for (int i = 0; i < numSamples; i++) {
+      final double absVal = samples[i].abs();
+      if (absVal > envFollower) {
+        envFollower += attackCoef * (absVal - envFollower);
+      } else {
+        envFollower += releaseCoef * (absVal - envFollower);
+      }
+      envelope[i] = envFollower;
+    }
+
+    // Normalize envelope
+    final double maxEnv = envelope.reduce(math.max);
+    if (maxEnv > 0) {
+      for (int i = 0; i < numSamples; i++) {
+        envelope[i] /= maxEnv;
+      }
+    }
+
+    // High pass filter to remove fundamental (keeps sibilants)
+    double hpX1 = 0, hpX2 = 0, hpY1 = 0, hpY2 = 0;
+    const double hpCutoff = 1000.0;
+    const double sampleRate = 44100.0;
+    final double hpW0 = 2 * math.pi * hpCutoff / sampleRate;
+    final double hpCosW0 = math.cos(hpW0);
+    final double hpAlpha = math.sin(hpW0) / 2;
+
+    for (int i = 0; i < numSamples; i++) {
+      final double x = samples[i];
+
+      // High pass biquad
+      final double hpB0 = (1 + hpCosW0) / 2 / (1 + hpAlpha);
+      final double hpB1 = -(1 + hpCosW0) / (1 + hpAlpha);
+      final double hpB2 = (1 + hpCosW0) / 2 / (1 + hpAlpha);
+      final double hpA1 = -2 * hpCosW0 / (1 + hpAlpha);
+      final double hpA2 = (1 - hpAlpha) / (1 + hpAlpha);
+
+      final double filtered = hpB0 * x + hpB1 * hpX1 + hpB2 * hpX2 - hpA1 * hpY1 - hpA2 * hpY2;
+      hpX2 = hpX1; hpX1 = x;
+      hpY2 = hpY1; hpY1 = filtered;
+
+      // Generate shaped noise (breath sound)
+      final double noise = (random.nextDouble() - 0.5) * 2;
+
+      // Modulate noise with envelope - louder when speaking
+      final double shapedNoise = noise * envelope[i] * 12000;
+
+      // Mix: mostly shaped noise with a bit of filtered original
+      final double mixed = shapedNoise * 0.7 + filtered * 0.3;
+
+      final int finalVal = mixed.toInt().clamp(-32768, 32767);
+      result[i * 2] = finalVal & 0xFF;
+      result[i * 2 + 1] = (finalVal >> 8) & 0xFF;
+    }
+
+    return result;
+  }
+
+  /// Apply megaphone effect - band pass + compression + distortion
+  Uint8List _applyMegaphoneEffect(Uint8List audioData) {
+    final result = Uint8List(audioData.length);
+    final numSamples = audioData.length ~/ 2;
+    const double sampleRate = 44100.0;
+
+    // High pass filter at 500Hz (remove bass)
+    double hpX1 = 0, hpX2 = 0, hpY1 = 0, hpY2 = 0;
+    const double hpCutoff = 500.0;
+    final double hpW0 = 2 * math.pi * hpCutoff / sampleRate;
+    final double hpCosW0 = math.cos(hpW0);
+    final double hpAlpha = math.sin(hpW0) / (2 * 0.707);
+
+    // Low pass filter at 4000Hz (remove highs - tinny sound)
+    double lpX1 = 0, lpX2 = 0, lpY1 = 0, lpY2 = 0;
+    const double lpCutoff = 4000.0;
+    final double lpW0 = 2 * math.pi * lpCutoff / sampleRate;
+    final double lpCosW0 = math.cos(lpW0);
+    final double lpAlpha = math.sin(lpW0) / (2 * 0.707);
+
+    // Peak filter at 2000Hz for nasal quality
+    double pkX1 = 0, pkX2 = 0, pkY1 = 0, pkY2 = 0;
+    const double pkFreq = 2000.0;
+    const double pkGain = 6.0; // dB boost
+    final double pkW0 = 2 * math.pi * pkFreq / sampleRate;
+    final double pkCosW0 = math.cos(pkW0);
+    final double pkA = math.pow(10, pkGain / 40).toDouble();
+    final double pkAlpha = math.sin(pkW0) / (2 * 2.0); // Q = 2
+
+    for (int i = 0; i < numSamples; i++) {
+      int sample = audioData[i * 2] | (audioData[i * 2 + 1] << 8);
+      if (sample > 32767) sample -= 65536;
+      double x = sample.toDouble();
+
+      // High pass filter
+      final double hpB0 = (1 + hpCosW0) / 2 / (1 + hpAlpha);
+      final double hpB1 = -(1 + hpCosW0) / (1 + hpAlpha);
+      final double hpB2 = (1 + hpCosW0) / 2 / (1 + hpAlpha);
+      final double hpA1 = -2 * hpCosW0 / (1 + hpAlpha);
+      final double hpA2 = (1 - hpAlpha) / (1 + hpAlpha);
+
+      double hpY = hpB0 * x + hpB1 * hpX1 + hpB2 * hpX2 - hpA1 * hpY1 - hpA2 * hpY2;
+      hpX2 = hpX1; hpX1 = x;
+      hpY2 = hpY1; hpY1 = hpY;
+
+      // Low pass filter
+      final double lpB0 = (1 - lpCosW0) / 2 / (1 + lpAlpha);
+      final double lpB1 = (1 - lpCosW0) / (1 + lpAlpha);
+      final double lpB2 = (1 - lpCosW0) / 2 / (1 + lpAlpha);
+      final double lpA1 = -2 * lpCosW0 / (1 + lpAlpha);
+      final double lpA2 = (1 - lpAlpha) / (1 + lpAlpha);
+
+      double lpY = lpB0 * hpY + lpB1 * lpX1 + lpB2 * lpX2 - lpA1 * lpY1 - lpA2 * lpY2;
+      lpX2 = lpX1; lpX1 = hpY;
+      lpY2 = lpY1; lpY1 = lpY;
+
+      // Peak filter for nasal boost
+      final double pkB0 = (1 + pkAlpha * pkA) / (1 + pkAlpha / pkA);
+      final double pkB1 = (-2 * pkCosW0) / (1 + pkAlpha / pkA);
+      final double pkB2 = (1 - pkAlpha * pkA) / (1 + pkAlpha / pkA);
+      final double pkA1 = pkB1;
+      final double pkA2 = (1 - pkAlpha / pkA) / (1 + pkAlpha / pkA);
+
+      double pkY = pkB0 * lpY + pkB1 * pkX1 + pkB2 * pkX2 - pkA1 * pkY1 - pkA2 * pkY2;
+      pkX2 = pkX1; pkX1 = lpY;
+      pkY2 = pkY1; pkY1 = pkY;
+
+      // Compression (soft knee)
+      double compressed = pkY * 2.5;
+      const double threshold = 10000.0;
+      if (compressed > threshold) {
+        compressed = threshold + (compressed - threshold) * 0.3;
+      } else if (compressed < -threshold) {
+        compressed = -threshold + (compressed + threshold) * 0.3;
+      }
+
+      // Slight distortion for speaker breakup
+      compressed *= 1.3;
+      if (compressed > 20000) compressed = 20000;
+      if (compressed < -20000) compressed = -20000;
+
+      final int finalVal = compressed.toInt().clamp(-32768, 32767);
+      result[i * 2] = finalVal & 0xFF;
+      result[i * 2 + 1] = (finalVal >> 8) & 0xFF;
+    }
+
+    return result;
+  }
+
+  /// Apply cave effect - long reverb with multiple echoes
+  Uint8List _applyCaveEffect(Uint8List audioData) {
+    final numSamples = audioData.length ~/ 2;
+    final samples = Int16List(numSamples);
+
+    // Read samples
+    for (int i = 0; i < numSamples; i++) {
+      int val = audioData[i * 2] | (audioData[i * 2 + 1] << 8);
+      if (val > 32767) val -= 65536;
+      samples[i] = val;
+    }
+
+    // Multiple delay lines for reverb
+    const delays = [4410, 7350, 11025, 15435, 22050]; // ~100ms, 166ms, 250ms, 350ms, 500ms
+    const decays = [0.6, 0.5, 0.4, 0.3, 0.2];
+
+    for (int d = 0; d < delays.length; d++) {
+      final delay = delays[d];
+      final decay = decays[d];
+
+      for (int i = delay; i < numSamples; i++) {
+        double processed = samples[i] + samples[i - delay] * decay;
+        samples[i] = processed.toInt().clamp(-32768, 32767);
+      }
+    }
+
+    // Convert back
+    final result = Uint8List(audioData.length);
+    for (int i = 0; i < numSamples; i++) {
+      result[i * 2] = samples[i] & 0xFF;
+      result[i * 2 + 1] = (samples[i] >> 8) & 0xFF;
+    }
+
+    return result;
+  }
+
+  /// Apply telephone effect - narrow band pass (300-3400Hz)
+  Uint8List _applyTelephoneEffect(Uint8List audioData) {
+    final result = Uint8List(audioData.length);
+    const double sampleRate = 44100.0;
+
+    // High pass at 300Hz
+    const double hpCutoff = 300.0;
+    final double hpW0 = 2 * math.pi * hpCutoff / sampleRate;
+    final double hpAlpha = math.sin(hpW0) / 2;
+    final double hpCosW0 = math.cos(hpW0);
+
+    double hpX1 = 0, hpX2 = 0, hpY1 = 0, hpY2 = 0;
+
+    // Low pass at 3400Hz
+    const double lpCutoff = 3400.0;
+    final double lpW0 = 2 * math.pi * lpCutoff / sampleRate;
+    final double lpAlpha = math.sin(lpW0) / 2;
+    final double lpCosW0 = math.cos(lpW0);
+
+    double lpX1 = 0, lpX2 = 0, lpY1 = 0, lpY2 = 0;
+
+    for (int i = 0; i < audioData.length ~/ 2; i++) {
+      int sample = audioData[i * 2] | (audioData[i * 2 + 1] << 8);
+      if (sample > 32767) sample -= 65536;
+      double x = sample.toDouble();
+
+      // High pass filter
+      final double hpB0 = (1 + hpCosW0) / 2 / (1 + hpAlpha);
+      final double hpB1 = -(1 + hpCosW0) / (1 + hpAlpha);
+      final double hpB2 = (1 + hpCosW0) / 2 / (1 + hpAlpha);
+      final double hpA1 = -2 * hpCosW0 / (1 + hpAlpha);
+      final double hpA2 = (1 - hpAlpha) / (1 + hpAlpha);
+
+      double hpY = hpB0 * x + hpB1 * hpX1 + hpB2 * hpX2 - hpA1 * hpY1 - hpA2 * hpY2;
+      hpX2 = hpX1; hpX1 = x;
+      hpY2 = hpY1; hpY1 = hpY;
+
+      // Low pass filter
+      final double lpB0 = (1 - lpCosW0) / 2 / (1 + lpAlpha);
+      final double lpB1 = (1 - lpCosW0) / (1 + lpAlpha);
+      final double lpB2 = (1 - lpCosW0) / 2 / (1 + lpAlpha);
+      final double lpA1 = -2 * lpCosW0 / (1 + lpAlpha);
+      final double lpA2 = (1 - lpAlpha) / (1 + lpAlpha);
+
+      double lpY = lpB0 * hpY + lpB1 * lpX1 + lpB2 * lpX2 - lpA1 * lpY1 - lpA2 * lpY2;
+      lpX2 = lpX1; lpX1 = hpY;
+      lpY2 = lpY1; lpY1 = lpY;
+
+      // Add slight distortion for analog feel
+      double distorted = lpY * 1.5;
+      if (distorted > 24000) distorted = 24000;
+      if (distorted < -24000) distorted = -24000;
+
+      final int finalVal = distorted.toInt().clamp(-32768, 32767);
+      result[i * 2] = finalVal & 0xFF;
+      result[i * 2 + 1] = (finalVal >> 8) & 0xFF;
+    }
+
+    return result;
+  }
+
+  /// Apply stadium effect - reverb + slight distortion
+  Uint8List _applyStadiumEffect(Uint8List audioData) {
+    // First apply cave reverb for spacious sound
+    final reverbed = _applyCaveEffect(audioData);
+
+    // Then add slight distortion/compression for PA system feel
+    final result = Uint8List(reverbed.length);
+
+    for (int i = 0; i < reverbed.length ~/ 2; i++) {
+      int sample = reverbed[i * 2] | (reverbed[i * 2 + 1] << 8);
+      if (sample > 32767) sample -= 65536;
+
+      // Soft clipping
+      double processed = sample * 1.2;
+      if (processed > 20000) processed = 20000 + (processed - 20000) * 0.3;
+      if (processed < -20000) processed = -20000 + (processed + 20000) * 0.3;
+
+      final int finalVal = processed.toInt().clamp(-32768, 32767);
+      result[i * 2] = finalVal & 0xFF;
+      result[i * 2 + 1] = (finalVal >> 8) & 0xFF;
+    }
+
+    return result;
+  }
+
+  /// Apply horror effect - reverse reverb + pitch down
+  Uint8List _applyHorrorEffect(Uint8List audioData) {
+    final numSamples = audioData.length ~/ 2;
+
+    // Create reversed copy
+    final reversed = Uint8List(audioData.length);
+    for (int i = 0; i < numSamples; i++) {
+      final srcIndex = (numSamples - 1 - i) * 2;
+      reversed[i * 2] = audioData[srcIndex];
+      reversed[i * 2 + 1] = audioData[srcIndex + 1];
+    }
+
+    // Apply reverb to reversed
+    final reverbedReverse = _applyCaveEffect(reversed);
+
+    // Reverse it back
+    final reverseReverb = Uint8List(reverbedReverse.length);
+    final revNumSamples = reverbedReverse.length ~/ 2;
+    for (int i = 0; i < revNumSamples; i++) {
+      final srcIndex = (revNumSamples - 1 - i) * 2;
+      reverseReverb[i * 2] = reverbedReverse[srcIndex];
+      reverseReverb[i * 2 + 1] = reverbedReverse[srcIndex + 1];
+    }
+
+    // Mix with original (dry/wet)
+    final mixed = Uint8List(audioData.length);
+    for (int i = 0; i < numSamples; i++) {
+      int original = audioData[i * 2] | (audioData[i * 2 + 1] << 8);
+      if (original > 32767) original -= 65536;
+
+      int effect = reverseReverb[i * 2] | (reverseReverb[i * 2 + 1] << 8);
+      if (effect > 32767) effect -= 65536;
+
+      final int mixedSample = ((original * 0.5) + (effect * 0.5)).toInt().clamp(-32768, 32767);
+      mixed[i * 2] = mixedSample & 0xFF;
+      mixed[i * 2 + 1] = (mixedSample >> 8) & 0xFF;
+    }
+
+    // Pitch down for creepy feel
+    return _resampleAudio(mixed, 0.8);
+  }
+
+  /// Export audio file with effect applied (for saving/sharing)
+  Future<String> exportWithEffect(String filePath, EffectType effect) async {
+    return await _applyEffect(filePath, effect);
   }
 
   /// Play audio file with optional effect

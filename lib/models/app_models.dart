@@ -19,7 +19,27 @@ extension AppModeExtension on AppMode {
 }
 
 /// Effect types available for audio processing
-enum EffectType { none, chipmunk, demon, robot, echo, underwater, radio, ghost }
+enum EffectType {
+  none,
+  chipmunk,
+  demon,
+  robot,
+  echo,
+  underwater,
+  radio,
+  ghost,
+  // New effects
+  alien,
+  drunk,
+  helium,
+  giant,
+  whisper,
+  megaphone,
+  cave,
+  telephone,
+  stadium,
+  horror,
+}
 
 /// Extension to get display labels for effects
 extension EffectTypeExtension on EffectType {
@@ -41,6 +61,26 @@ extension EffectTypeExtension on EffectType {
         return 'Radio';
       case EffectType.ghost:
         return 'Ghost';
+      case EffectType.alien:
+        return 'Alien';
+      case EffectType.drunk:
+        return 'Drunk';
+      case EffectType.helium:
+        return 'Helium';
+      case EffectType.giant:
+        return 'Giant';
+      case EffectType.whisper:
+        return 'Whisper';
+      case EffectType.megaphone:
+        return 'Megaphone';
+      case EffectType.cave:
+        return 'Cave';
+      case EffectType.telephone:
+        return 'Telephone';
+      case EffectType.stadium:
+        return 'Stadium';
+      case EffectType.horror:
+        return 'Horror';
     }
   }
 }
@@ -52,6 +92,7 @@ class StoredRecording {
   final double duration;
   final String originalPath;
   final String reversedPath;
+  final String? effectLabel; // Applied effect name (null = no effect)
 
   StoredRecording({
     required this.id,
@@ -59,5 +100,6 @@ class StoredRecording {
     required this.duration,
     required this.originalPath,
     required this.reversedPath,
+    this.effectLabel,
   });
 }
